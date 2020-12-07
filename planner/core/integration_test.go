@@ -2392,3 +2392,32 @@ func (s *testIntegrationSuite) TestIssue22105(c *C) {
 		tk.MustQuery(tt).Check(testkit.Rows(output[i].Plan...))
 	}
 }
+
+func (s *testIntegrationSerialSuite) TestPushDownProjection(c *C) {
+	tk := testkit.NewTestKit(c, s.store)
+	tk.MustExec("use test")
+	tk.MustExec("drop table if exists t")
+	tk.MustExec("create table t(a int primary key, b varchar(20))")
+
+	// Create virtual tiflash replica info.
+	dom := domain.GetDomain(tk.Se)
+	is := dom.InfoSchema()
+	db, exists := is.SchemaByName(model.NewCIStr("test"))
+	c.Assert(exists, IsTrue)
+	for _, tblInfo := range db.Tables {
+		if tblInfo.Name.L == "t" {
+			tblInfo.TiFlashReplica = &model.TiFlashReplicaInfo{
+				Count:     1,
+				Available: true,
+			}
+		}
+	}
+
+	tk.MustExec("set @@session.tidb_isolation_read_engines = 'tiflash'")
+	result := tk.MustQuery("desc select a+1 from t")
+	c.Assert(result.Rows()[1][0], Equals, "└─Projection_3")
+
+	tk.MustExec("set @@session.tidb_isolation_read_engines = 'tikv'")
+	result = tk.MustQuery("desc select a+1 from t")
+	c.Assert(result.Rows()[0][0], Equals, "Projection_3")
+}
