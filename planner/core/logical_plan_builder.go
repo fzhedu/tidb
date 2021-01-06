@@ -3404,7 +3404,6 @@ func (b *PlanBuilder) buildSelect(ctx context.Context, sel *ast.SelectStmt) (p L
 		if len(aggFuncs) == 0 && sel.GroupBy == nil {
 			hasAgg = false
 		}
-		fmt.Println("has aggs =  ", len(aggFuncs))
 	}
 	if hasAgg {
 		var aggIndexMap map[int]int
