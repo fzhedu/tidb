@@ -335,6 +335,11 @@ func (er *expressionRewriter) buildSubquery(ctx context.Context, subq *ast.Subqu
 func (er *expressionRewriter) Enter(inNode ast.Node) (ast.Node, bool) {
 	switch v := inNode.(type) {
 	case *ast.AggregateFuncExpr:
+		if er.sctx.GetSessionVars().AllowMPPExecution {
+			if inNode.(*ast.AggregateFuncExpr).F == ast.AggFuncAvg {
+				return inNode, false
+			}
+		}
 		index, ok := -1, false
 		if er.aggrMap != nil {
 			index, ok = er.aggrMap[v]
@@ -1014,8 +1019,14 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 		inNode = er.preprocess(inNode)
 	}
 	switch v := inNode.(type) {
-	case *ast.AggregateFuncExpr, *ast.ColumnNameExpr, *ast.ParenthesesExpr, *ast.WhenClause,
+	case *ast.ColumnNameExpr, *ast.ParenthesesExpr, *ast.WhenClause,
 		*ast.SubqueryExpr, *ast.ExistsSubqueryExpr, *ast.CompareSubqueryExpr, *ast.ValuesExpr, *ast.WindowFuncExpr, *ast.TableNameExpr:
+	case *ast.AggregateFuncExpr:
+		if er.sctx.GetSessionVars().AllowMPPExecution {
+			if inNode.(*ast.AggregateFuncExpr).F == ast.AggFuncAvg {
+				return inNode.(*ast.AggregateFuncExpr).Args[0], true
+			}
+		}
 	case *driver.ValueExpr:
 		v.Datum.SetValue(v.Datum.GetValue(), &v.Type)
 		value := &expression.Constant{Value: v.Datum, RetType: &v.Type}

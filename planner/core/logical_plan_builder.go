@@ -1200,7 +1200,6 @@ func (b *PlanBuilder) buildProjection(ctx context.Context, p LogicalPlan, fields
 		if !field.Auxiliary {
 			oldLen++
 		}
-
 		isWindowFuncField := ast.HasWindowFlag(field.Expr)
 		// Although window functions occurs in the select fields, but it has to be processed after having clause.
 		// So when we build the projection for select fields, we need to skip the window function.
@@ -2133,7 +2132,30 @@ func (b *PlanBuilder) extractAggFuncsInSelectFields(fields []*ast.SelectField) (
 		n, _ := f.Expr.Accept(extractor)
 		f.Expr = n.(ast.ExprNode)
 	}
-	aggList := extractor.AggFuncs
+	aggList := make([]*ast.AggregateFuncExpr, 0, len(extractor.AggFuncs)*2)
+	if b.ctx.GetSessionVars().AllowMPPExecution {
+		for _, aggf := range extractor.AggFuncs {
+			if aggf.F == ast.AggFuncAvg {
+				avgCount := *aggf
+				avgCount.F = ast.AggFuncCount
+				avgCount.Args = []ast.ExprNode{aggf.Args[0]}
+				aggList = append(aggList, &avgCount)
+				avgSum := *aggf
+				avgSum.F = ast.AggFuncSum
+				avgSum.Args = []ast.ExprNode{aggf.Args[0]}
+				aggList = append(aggList, &avgSum)
+				// case count(arg) when 0 then null else sum(arg)/count(arg) end
+				Else := &ast.BinaryOperationExpr{Op: opcode.Div, L: &avgSum, R: &avgCount}
+				When := ast.NewValueExpr(0, "", "")
+				Then := ast.NewValueExpr(nil, "", "")
+				aggf.Args[0] = &ast.CaseExpr{Value: &avgCount, WhenClauses: []*ast.WhenClause{{Expr: When, Result: Then}}, ElseClause: Else}
+			} else {
+				aggList = append(aggList, aggf)
+			}
+		}
+	} else {
+		aggList = extractor.AggFuncs
+	}
 	totalAggMapper := make(map[*ast.AggregateFuncExpr]int, len(aggList))
 
 	for i, agg := range aggList {
