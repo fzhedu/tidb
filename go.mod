@@ -89,3 +89,5 @@ require (
 )
 
 go 1.13
+
+replace github.com/pingcap/tipb => github.com/fzhedu/tipb v0.0.0-20210520065401-be39dd92daa3
