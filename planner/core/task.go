@@ -1828,7 +1828,7 @@ func (p *PhysicalHashAgg) attach2TaskForMpp(tasks ...task) task {
 		t = mpp.convertToRootTask(p.ctx)
 		inputRows = t.count()
 		attachPlan2Task(finalAgg, t)
-		t.addCost(p.GetCost(inputRows, true))
+		t.addCost(0)
 		return t
 	default:
 		return invalidTask
